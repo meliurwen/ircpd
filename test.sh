@@ -30,6 +30,9 @@ while [ $# -gt 0 ]; do
             shift
             CHAN="$1"
         ;;
+        --tls )
+            TLS="true"
+        ;;
         * )
             printf "Unrecognized argument: %s\n" "$1"
             exit 1
@@ -46,6 +49,8 @@ IRCD_ADDR="${IRCD_ADDR:-127.0.0.1}"
 IRCD_PORT="${IRCD_PORT:-6667}"
 CHAN="${CHAN:-}"
 
+TLS="${TLS:-false}"
+
 # Value: 1<=interval<=1023
 # If value is <= 0 then do not actively ping; this way the bot connection relies
 # solely on the pings sent from the server
@@ -60,6 +65,18 @@ thrd_connection () {
         nc -v "$1" "$2" > \
             "$NPIPE_IN" \
             || printf "nc or tail process crashed!\n"
+    printf "Sending termination signal to parent process (PID %s)...\n" "$3"
+    kill "$3"
+    printf "Exiting \"thrd_connection\" with error...\n"
+    exit 1
+}
+
+thrd_openssl_connection () {
+    # <IRCD_ADDR> <IRCD_PORT> <PID_SELF>
+    tail -f "$NPIPE_OUT" | \
+        openssl s_client -connect "$1":"$2" > \
+            "$NPIPE_IN" \
+            || printf "openssl or tail process crashed!\n"
     printf "Sending termination signal to parent process (PID %s)...\n" "$3"
     kill "$3"
     printf "Exiting \"thrd_connection\" with error...\n"
@@ -276,7 +293,11 @@ mkfifo "$NPIPE_IN" 2> /dev/null || printf "fifo already present\n"
 
 PID_SELF=$$
 
-thrd_connection "$IRCD_ADDR" "$IRCD_PORT" "$PID_SELF" &
+if [ "$TLS" = "true" ]; then
+    thrd_openssl_connection "$IRCD_ADDR" "$IRCD_PORT" "$PID_SELF" &
+else
+    thrd_connection "$IRCD_ADDR" "$IRCD_PORT" "$PID_SELF" &
+fi
 PID_NC=$!
 # Get list of children PIDs, transform newlines in whitespaces and then trim
 PID_NC_CHILDREN="$(pgrep -P $PID_NC | tr '\n' ' ' | awk '{$1=$1;print}')"
