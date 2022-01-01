@@ -231,13 +231,12 @@ msg_cmd_colon () {
             PAYLOAD_MODE_TYPE="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f3)"
             case "$PAYLOAD_DEST" in
                 [\&#+!]* ) # It's a channel
-                    PAYLOAD_MODE_B_ON="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f4)"
-                    printf "MODE %s from channel %s to %s by %s (%s)\n" "$PAYLOAD_MODE_TYPE" "$PAYLOAD_DEST" "$PAYLOAD_MODE_B_ON" "$SNDR_META_NICK" "$SNDR_META_USER@$SNDR_META_HNAME"
-                    unset PAYLOAD_MODE_B_ON
+                    PAYLOAD_MODE_DEST="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f4)"
+                    printf "MODE %s for channel %s to %s by %s (%s)\n" "$PAYLOAD_MODE_TYPE" "$PAYLOAD_DEST" "$PAYLOAD_MODE_DEST" "$SNDR_META_NICK" "$SNDR_META_USER@$SNDR_META_HNAME"
+                    unset PAYLOAD_MODE_DEST
                 ;;
                 * ) # Assue it's a nickname (validating this it's a pain)
                     printf "MODE %s to nick %s by %s\n" "${PAYLOAD_MODE_TYPE#:}" "$PAYLOAD_DEST" "$SNDR_META_NICK"
-                    unset PAYLOAD_MODE_B_ON
                 ;;
             esac
             unset PAYLOAD_DEST PAYLOAD_MODE_TYPE
