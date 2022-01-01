@@ -26,10 +26,6 @@ while [ $# -gt 0 ]; do
             shift
             IRCD_PORT="$1"
         ;;
-        --chan )
-            shift
-            CHAN="$1"
-        ;;
         --tls )
             TLS="true"
         ;;
@@ -47,7 +43,6 @@ REALNAME="${REALNAME:-Test Bot}"
 
 IRCD_ADDR="${IRCD_ADDR:-127.0.0.1}"
 IRCD_PORT="${IRCD_PORT:-6667}"
-CHAN="${CHAN:-}"
 
 TLS="${TLS:-false}"
 
@@ -258,9 +253,18 @@ msg_cmd_colon () {
                     fi
                     :
                 ;;
-                474 )
+                353 ) # RPL_NAMREPLY
+                    PAYLOAD_DEST="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f2)"
+                    PAYLOAD_CHAN_TYPE="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f3)"
+                    PAYLOAD_CHAN_NAME="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f4)"
+                    PAYLOAD_NICK_LIST="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f5- | cut -c 2-)"
+                    printf "List sent to %s of channel type %s named %s with this content: %s\n" "$PAYLOAD_DEST" "$PAYLOAD_CHAN_TYPE" "$PAYLOAD_CHAN_NAME" "$PAYLOAD_NICK_LIST"
+                    unset PAYLOAD_DEST PAYLOAD_CHAN_TYPE PAYLOAD_CHAN_NAME PAYLOAD_CHAN_NAME PAYLOAD_NICK_LIST
+                ;;
+                474 ) # ERR_BANNEDFROMCHAN
                     PAYLOAD_CHAN="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f3)"
                     printf "ERROR %s, BANNED FROM CHANNEL %s\n" "$PAYLOAD_CMD" "$PAYLOAD_CHAN"
+                    unset PAYLOAD_CHAN
                 ;;
                 *)
                     :
