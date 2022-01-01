@@ -54,26 +54,27 @@ PING_INTERVAL=${PING_INTERVAL:-30}
 NPIPE_IN=${NPIPE_IN:-./botin.fifo}
 NPIPE_OUT=${NPIPE_OUT:-./botout.fifo}
 
-thrd_connection () {
-    # <IRCD_ADDR> <IRCD_PORT> <PID_SELF>
-    tail -f "$NPIPE_OUT" | \
-        nc -v "$1" "$2" > \
-            "$NPIPE_IN" \
-            || printf "nc or tail process crashed!\n"
-    printf "Sending termination signal to parent process (PID %s)...\n" "$3"
-    kill "$3"
-    printf "Exiting \"thrd_connection\" with error...\n"
-    exit 1
-}
-
-thrd_openssl_connection () {
-    # <IRCD_ADDR> <IRCD_PORT> <PID_SELF>
-    tail -f "$NPIPE_OUT" | \
-        openssl s_client -connect "$1":"$2" > \
-            "$NPIPE_IN" \
-            || printf "openssl or tail process crashed!\n"
-    printf "Sending termination signal to parent process (PID %s)...\n" "$3"
-    kill "$3"
+thrd_connection() {
+    # <IRCD_ADDR> <IRCD_PORT> <TLS> <PID_SELF>
+    case "$TLS" in
+        true|openssl)
+            tail -f "$NPIPE_OUT" | \
+                openssl s_client -verify_quiet -quiet -connect "$1":"$2" > \
+                    "$NPIPE_IN" \
+                    || printf "openssl or tail process terminated or crashed!\n"
+        ;;
+        false|plain)
+            tail -f "$NPIPE_OUT" | \
+                nc -v "$1" "$2" > \
+                    "$NPIPE_IN" \
+                    || printf "nc or tail process terminated or crashed!\n"
+        ;;
+        *)
+            printf "Connection type not recognized!\n"
+        ;;
+    esac
+    printf "Sending termination signal to parent process (PID %s)...\n" "$4"
+    kill "$4"
     printf "Exiting \"thrd_connection\" with error...\n"
     exit 1
 }
@@ -165,8 +166,7 @@ handle_failed_conn_reg () {
 }
 
 do_perform () {
-    printf "JOIN %s\r\n" "${CHAN}" > "$NPIPE_OUT"
-    unset IRCBOT_PERFORM
+    printf "JOIN %s\r\n" "##botang" > "$NPIPE_OUT"
 }
 
 do_greet () {
@@ -183,9 +183,14 @@ do_greet () {
 
 msg_cmd_colon () {
     # <LINE> <MSG_CMD>
-    SNDR_META="$(printf "%s" "${2}" | cut -c 2- | awk -F "[!~ @]" '{print $1 " " $3 " "  $4F}' )"
+    SNDR_META="$(printf "%s" "${2}" | cut -c 2- | awk -F "[!~ @]" '{print $1 " " $2 " "  $3F}' )"
     SNDR_META_NICK="$(printf "%s" "${SNDR_META}" | cut -d' ' -f1 )"
     SNDR_META_USER="$(printf "%s" "${SNDR_META}" | cut -d' ' -f2 )"
+    SNDR_META_IDENTD="true"
+    if [ "${SNDR_META_USER#\~}" != "$SNDR_META_USER" ]; then
+        SNDR_META_USER="${SNDR_META_USER#\~}"
+        SNDR_META_IDENTD="false"
+    fi
     SNDR_META_HNAME="$(printf "%s" "${SNDR_META}" | cut -d' ' -f3 )"
     PAYLOAD="$(printf "%s" "${1}" | cut -d' ' -f2-)"
     PAYLOAD_CMD="$(printf "%s" "${PAYLOAD}" | cut -d' ' -f1)"
@@ -244,10 +249,10 @@ msg_cmd_colon () {
                     printf "Connection registration succeeded!\n"
                 ;;
                 004 )
-                    [ -n "$IRCBOT_PERFORM" ] && do_perform
+                    [ -n "$IRCBOT_PERFORM" ] && do_perform && unset IRCBOT_PERFORM
                     # If PING_INTERVAL is <= 0 do not even spawn the process;
                     # this way we avoid resources waste and division by 0.
-                    if [ $PING_INTERVAL -ge 1 ]; then
+                    if [ "$PING_INTERVAL" -ge 1 ]; then
                         thrd_ctrl "${IRCD_ADDR}" $PING_INTERVAL $PID_SELF &
                         PID_CTRL=$!
                     fi
@@ -274,6 +279,7 @@ msg_cmd_colon () {
         *)
         ;;
     esac
+    unset SNDR_META SNDR_META_NICK SNDR_META_USER SNDR_META_IDENTD SNDR_META_HNAME PAYLOAD PAYLOAD_CMD
 }
 
 # We need milliseconds and only the GNU implementation of `date` can give that;
@@ -297,11 +303,7 @@ mkfifo "$NPIPE_IN" 2> /dev/null || printf "fifo already present\n"
 
 PID_SELF=$$
 
-if [ "$TLS" = "true" ]; then
-    thrd_openssl_connection "$IRCD_ADDR" "$IRCD_PORT" "$PID_SELF" &
-else
-    thrd_connection "$IRCD_ADDR" "$IRCD_PORT" "$PID_SELF" &
-fi
+thrd_connection "$IRCD_ADDR" "$IRCD_PORT" "$TLS" "$PID_SELF" &
 PID_NC=$!
 # Get list of children PIDs, transform newlines in whitespaces and then trim
 PID_NC_CHILDREN="$(pgrep -P $PID_NC | tr '\n' ' ' | awk '{$1=$1;print}')"
