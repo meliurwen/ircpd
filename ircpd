@@ -172,12 +172,9 @@ do_perform () {
 do_greet () {
     # <$PAYLOAD_DEST> <$SNDR_META_NICK>
     if [ "$2" != "$NICK" ]; then
-        privmsg_send "$1" "Howdy $2 OwO!"
-        privmsg_send "$1" "We are spread across different timezones and we'll reach you asap"
-        privmsg_send "$1" "In the meantime write few lines about you ^_^"
-        privmsg_send "$1" "Enjoy!"
-        privmsg_send "$1" ":UwU"
-        privmsg_send "$1" "OwO:"
+        privmsg_send "$1" "Oh, hello $2 ! I'm a bot, blip, blop"
+        privmsg_send "$1" "The folks in this channel are spread across different timezones and someone reach you asap"
+        privmsg_send "$1" "In the meantime write few lines about you"
     fi
 }
 
